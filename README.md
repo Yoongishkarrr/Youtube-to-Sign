@@ -16,14 +16,18 @@ Prerequisites
 1. Clone the repository:
 git clone https://github.com/your-username/sign-language-bot.git
 2. Install the required Python packages:
+```
 pip install -r requirements.txt
-3. Replace TOKEN variable in main.py with your Telegram bot token.
+```
+4. Replace TOKEN variable in main.py with your Telegram bot token.
 ## Usage
 1. Start the bot by running:
+```
 python main.py
-2. Send a YouTube video link to the bot.
-3. The bot will convert the video into sign language with subtitles.
-4. Receive the final video with subtitles.
+```
+3. Send a YouTube video link to the bot.
+4. The bot will convert the video into sign language with subtitles.
+5. Receive the final video with subtitles.
 ## Customization
 You can customize the bot by adding your own video clips for sign language gestures. Simply update the user_defined_words dictionary in main.py with your words and corresponding video paths.
 

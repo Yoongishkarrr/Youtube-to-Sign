@@ -11,10 +11,9 @@ from moviepy.editor import VideoFileClip, concatenate_videoclips, CompositeVideo
 import shutil
 from moviepy.editor import TextClip
 
-# Токен вашего телеграм-бота
+# your telegram api
 TOKEN = "6673045880:AAFyEN4jHRjqETu1yIY3HimwXfFIORA5xjE"
 
-# Создание объекта Updater и использование контекста
 updater = Updater(token=TOKEN, use_context=True)
 
 user_defined_words = {
@@ -130,51 +129,38 @@ user_defined_words = {
     'you': 'c:/Users/dell/Downloads/You.mp4',
     'your': 'c:/Users/dell/Downloads/Your.mp4',
     'yourself': 'c:/Users/dell/Downloads/Yourself.mp4',
-    # Добавьте свои слова и соответствующие видео
+    # add more
 }
 
-# Обработчик команды /start
 def start(update: Update, context: CallbackContext) -> None:
     update.message.reply_text("Hello! Send me a link to a YouTube video to convert to WAV format.")
 
 def add_subtitles_to_video(original_video_path, text, output_dir, subtitle_speed=1.5, fps=24):
      try:
-        # Load the original video
         original_clip = VideoFileClip(original_video_path)
 
-        # Split the text into lists of 5 words
         words = text.split()
         chunks_of_5_words = [words[i:i + 5] for i in range(0, len(words), 5)]
 
-        # Initialize a list to store paths to temporary video clips
         temp_video_clips = []
 
-        # Create temporary video clips for each list of words
         for i, chunk in enumerate(chunks_of_5_words):
             temp_text = ' '.join(chunk)
             temp_video_clip = create_temp_video(original_clip.size, temp_text, output_dir, f"temp_video_{i}", fps)
             temp_video_clips.append(temp_video_clip)
 
-        # Concatenate the subtitle clips
         subtitles_clip = concatenate_videoclips(temp_video_clips, method="compose")
 
-        # Set the fps of the subtitles clip to be the same as the original video
         subtitles_clip = subtitles_clip.set_fps(fps)
-
-        # Adjust the speed of the subtitles clip
         subtitles_clip = subtitles_clip.fx(vfx.speedx, subtitle_speed)
 
-        # Overlay the subtitles on the original video
         final_clip = CompositeVideoClip([original_clip.set_duration(subtitles_clip.duration), subtitles_clip])
 
-        # Set the fps of the final clip
         final_clip.fps = fps
 
-        # Create a unique name for the output video file
         filename = f"output_video_{uuid.uuid4()}.mp4"
         final_video_path = os.path.join(output_dir, filename)
 
-        # Write the final video file
         final_clip.write_videofile(final_video_path, codec='libx264', audio=False, fps=fps, remove_temp=True)
 
         return final_video_path
@@ -186,71 +172,55 @@ def add_subtitles_to_video(original_video_path, text, output_dir, subtitle_speed
 def create_temp_video(video_size, text, output_dir, filename, fps):
     temp_video_path = os.path.join(output_dir, f"{filename}.mp4")
 
-    # Создаем текстовый слой (субтитры) для каждого списка слов
     txt_clip = TextClip(text, fontsize=15, color='black', size=(video_size[0], 80))
-    txt_clip = txt_clip.set_pos(('center', 'bottom')).set_duration(5)  # Устанавливаем длительность 5 секунд
+    txt_clip = txt_clip.set_pos(('center', 'bottom')).set_duration(5)
 
-    # Создаем видеоклип с текстовым слоем
     video_clip = CompositeVideoClip([txt_clip], size=video_size)
 
-    # Записываем временный видеофайл
     video_clip.write_videofile(temp_video_path, codec='libx264', audio=False, fps=fps)
 
-    return video_clip  # Return the video clip instead of the file path
-
-# Обработчик текстовых сообщений
+    return video_clip  
+    
 def process_video(update: Update, context: CallbackContext) -> None:
     try:
         youtube_url = update.message.text
 
-        # Сообщение о начале обработки
         update.message.reply_text("Please be a little patient, text and video are being processed...")
 
-        # Создаем временную директорию для сохранения видеофайла
         temp_video_dir = os.path.join(os.getcwd(), 'temp_video')
         os.makedirs(temp_video_dir, exist_ok=True)
 
-        # Создаем временную директорию для сохранения изображений
         temp_images_dir = os.path.join(os.getcwd(), 'temp_images')
         os.makedirs(temp_images_dir, exist_ok=True)
 
-        # Загружаем, конвертируем в WAV и сохраняем аудиофайл в буфер BytesIO
         output_buffer = BytesIO()
         download_and_convert(youtube_url, output_buffer, temp_video_dir)
 
-        # Переводим позицию указателя в начало буфера для чтения
         output_buffer.seek(0)
-
-        # Обрабатываем аудио
+        
         result = audio_to_text(output_buffer)
         result = result.replace(',', ' ').replace("'", ' ')
         print("#" * 10)
         print(result)
 
-        # Отправляем текст
         context.bot.send_message(chat_id=update.effective_chat.id, text=f"Recognized text: {result}")
 
-        # Создаем оригинальное видео и видео с языком жестов
         original_video_path = download_original_video(youtube_url, temp_video_dir)
         sign_language_video_paths = []
 
         for word in result.lower().split():
-            # Попробуем получить видео для слова из пользовательских слов
             word_video = user_defined_words.get(word)
 
             if not word_video:
-                # Если видео для слова не найдено, пропускаем это слово
                 continue
 
-            # Видео для слова найдено в пользовательских словах
             print("@" * 20)
             print(word)
             sign_language_video_paths.append(create_video_from_mp4(word_video, temp_video_dir))
 
         final_video_path = create_video_from_videos(original_video_path, sign_language_video_paths, temp_video_dir)
 
-        # Добавить субтитры к видео с языком жестов
-        result_text = " ".join(result.lower().split())  # Правильное форматирование текста
+        result_text = " ".join(result.lower().split()) 
         final_video_path_with_subtitles = add_subtitles_to_video(final_video_path, result_text, temp_video_dir)
 
         # Отправляем видео с субтитрами
@@ -262,51 +232,40 @@ def process_video(update: Update, context: CallbackContext) -> None:
     except Exception as e:
         context.bot.send_message(chat_id=update.effective_chat.id, text=f"Error: {str(e)}")
     finally:
-        # Удаляем временные директории и файлы
         if os.path.exists(temp_video_dir):
             shutil.rmtree(temp_video_dir)
         if os.path.exists(temp_images_dir):
             shutil.rmtree(temp_images_dir)
-
-# Функция для создания видео из нескольких видеофайлов
+            
 def create_video_from_videos(original_video_path, sign_language_video_paths, output_dir):
     final_video_path = os.path.join(output_dir, "output_video.mp4")
 
-    # Load the original video
     original_clip = VideoFileClip(original_video_path)
-
-    # Load sign language videos and resize them to fit a corner of the original video
+    
     sign_language_clips = []
     for sign_language_path in sign_language_video_paths:
         sign_language_clip = VideoFileClip(sign_language_path)
         sign_language_clip = sign_language_clip.resize(height=100)
-        sign_language_clip = sign_language_clip.fx(vfx.speedx, 3)  # Ускоряем видео со скоростью 2
+        sign_language_clip = sign_language_clip.fx(vfx.speedx, 3) 
         sign_language_clips.append(sign_language_clip)
 
-    # Calculate the total duration of sign language videos
     total_duration = sum(clip.duration for clip in sign_language_clips)
 
-    # Concatenate sign language videos
     concatenated_clips = concatenate_videoclips(sign_language_clips, method="compose")
 
-    # Set the duration of the concatenated clips to match the original video
     concatenated_clips = concatenated_clips.set_duration(total_duration)
 
-    # Position sign language video in the bottom right corner
     w, h = original_clip.size
     w_sign, h_sign = concatenated_clips.size
     position = (w - w_sign, h - h_sign)
 
-    # Create a CompositeVideoClip with the original video and concatenated sign language videos
     final_clip = CompositeVideoClip([original_clip.set_position('center'), concatenated_clips.set_position(position)],
                                     size=original_clip.size)
 
-    # Write the final video file
     final_clip.write_videofile(final_video_path, codec='libx264', audio=False)
 
     return final_video_path
 
-# Функция для создания видео из MP4 файла
 def create_video_from_mp4(mp4_path, output_dir, speed=0.9):
     video_clip = VideoFileClip(mp4_path)
     video_clip = video_clip.fx(vfx.speedx, speed)
@@ -316,14 +275,11 @@ def create_video_from_mp4(mp4_path, output_dir, speed=0.9):
     
     return video_path
 
-# Функция для загрузки оригинального видео с YouTube
 def download_original_video(youtube_url, output_dir):
     try:
-        # Загружаем видео с YouTube
         yt = YouTube(youtube_url)
         video_stream = yt.streams.filter(file_extension='mp4').first()
 
-        # Загружаем видео
         original_video_path = os.path.join(output_dir, f"original_video_{uuid.uuid4()}.mp4")
         video_stream.download(output_path=output_dir, filename=os.path.basename(original_video_path))
 
@@ -332,46 +288,37 @@ def download_original_video(youtube_url, output_dir):
     except Exception as e:
         print(f"Error downloading original video: {str(e)}")
         raise
-
-# Функция для загрузки и конвертации видео в аудиоформат
+        
 def download_and_convert(youtube_url, output_buffer, temp_video_dir):
     video_path = None
     try:
-        # Загружаем видео с YouTube
         yt = YouTube(youtube_url)
         video_stream = yt.streams.filter(only_audio=True).first()
 
-        # Загружаем видео
         video_path = os.path.join(temp_video_dir, f"{uuid.uuid4()}.mp4")
         video_stream.download(output_path=temp_video_dir, filename=os.path.basename(video_path))
 
-        # Конвертируем видео в аудио с использованием pydub
         audio = AudioSegment.from_file(video_path)
-        audio = audio.set_frame_rate(16000)  # Устанавливаем частоту кадров в 16000 Гц
-        audio = audio.set_channels(1)  # Устанавливаем моно-канал
+        audio = audio.set_frame_rate(16000)  
+        audio = audio.set_channels(1)  
 
-        # Экспортируем аудио в WAV
-        audio.export(output_buffer, format='wav', codec='pcm_s16le')  # Указываем кодек
+        audio.export(output_buffer, format='wav', codec='pcm_s16le')
 
     except Exception as e:
         print(f"Error: {str(e)}")
     finally:
-        # Удаляем временные файлы
         if video_path and os.path.exists(video_path):
             os.remove(video_path)
 
-# Функция для преобразования аудио в текст с использованием Google Speech Recognition
 def audio_to_text(audio_buffer):
     recognizer = sr.Recognizer()
 
-    # Получаем аудиоданные из буфера BytesIO
     audio_data = AudioSegment.from_file(audio_buffer, format='wav')
-    audio_data = audio_data.set_channels(1)  # Устанавливаем моно-канал
-    audio_data = audio_data.set_sample_width(2)  # Устанавливаем 16-битную глубину дискретизации
+    audio_data = audio_data.set_channels(1) 
+    audio_data = audio_data.set_sample_width(2) 
 
-    # Сохраняем временный файл WAV
     temp_wav_path = 'temp_audio.wav'
-    audio_data.export(temp_wav_path, format='wav', codec='pcm_s16le')  # Указываем кодек
+    audio_data.export(temp_wav_path, format='wav', codec='pcm_s16le')  
 
     with sr.AudioFile(temp_wav_path) as source:
         audio_data = recognizer.record(source)
@@ -384,19 +331,14 @@ def audio_to_text(audio_buffer):
     except sr.RequestError as e:
         return f"Error contacting Google Speech Recognition service: {e}"
     finally:
-        # Удаляем временный файл
         if os.path.exists(temp_wav_path):
             os.remove(temp_wav_path)
 
-# Функция main для запуска бота
 def main() -> None:
     dp = updater.dispatcher
-
-    # Добавляем обработчики
     dp.add_handler(CommandHandler("start", start))
     dp.add_handler(MessageHandler(Filters.text & ~Filters.command, process_video))
 
-    # Запускаем бота
     updater.start_polling()
     updater.idle()
 
